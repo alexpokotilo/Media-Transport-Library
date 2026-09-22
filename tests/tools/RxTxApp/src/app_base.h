@@ -377,6 +377,7 @@ struct st_app_rx_anc_session {
 
   /* stat */
   int stat_frame_total_received;
+  int stat_pkt_invalid; /* RTP packets rejected on parity / checksum error */
   uint64_t stat_frame_first_rx_time;
 };
 
@@ -617,6 +618,8 @@ struct st_app_rx_st20p_session {
   int stat_frame_received;
   uint64_t stat_last_time;
   int stat_frame_total_received;
+  int stat_frame_sha_fail;   /* frames whose content did not match the TX sha */
+  int stat_frame_sha_absent; /* frames that carried no sha, so were not checked */
   uint64_t stat_frame_first_rx_time;
   uint64_t stat_frame_last_rx_time; /* for auto_stop: time of last frame received */
   double expect_fps;

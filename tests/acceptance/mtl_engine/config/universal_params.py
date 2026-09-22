@@ -99,6 +99,13 @@ UNIVERSAL_PARAMS = {
     "rx_mix_lcore": False,  # Allow TX/RX video on same core
     "runtime_session": False,  # Start instance before creating sessions
     "rx_timing_parser": False,  # Enable timing check for video RX streams
+    # TX attaches a SHA256 of every st20p frame as RTP user metadata and RX
+    # recomputes it over the frame's first plane, so content is verified in band
+    # with no output file. Only st20p sessions gate on it, and two settings break
+    # it: an output_pixel_format that differs from pixel_format makes RX convert,
+    # so every frame mismatches; hdr_split takes an RX path that never parses the
+    # metadata, so no frame is checked and the session reports FAILED.
+    "video_sha_check": False,  # Verify st20p content against the TX sha
     "auto_stop": False,  # Auto stop after input file ends
     # Uncapped, one RX recording grows until it fills the ramdisk (4K p119 writes
     # 2.5 GB/s). RxTxApp stops on a frame boundary here and keeps receiving, so the

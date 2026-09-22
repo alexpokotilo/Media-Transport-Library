@@ -114,15 +114,26 @@ static void* app_rx_st20p_frame_thread(void* arg) {
 
     app_rx_st20p_consume_frame(s, frame);
     if (s->sha_check) {
+      /* Only the first failure is logged: a broken stream fails every frame, and
+       * at 60 fps that floods the log the test harness has to read back. */
       if (frame->user_meta_size != sizeof(shas)) {
-        err("%s(%d), invalid user meta size %" PRId64 "\n", __func__, idx,
-            frame->user_meta_size);
+        /* The tx sha travels in an extra packet that the rx handles before the frame
+         * completeness accounting, so losing it delivers a complete frame with no
+         * sha: unverifiable, not corrupt. Counted apart from a mismatch so that
+         * packet loss cannot be reported as bad content. */
+        if (!s->stat_frame_sha_absent)
+          warn("%s(%d), no sha in user meta, size %" PRId64 "\n", __func__, idx,
+               frame->user_meta_size);
+        s->stat_frame_sha_absent++;
       } else {
         st_sha256((unsigned char*)frame->addr[0], st_frame_plane_size(frame, 0), shas);
         if (memcmp(shas, frame->user_meta, sizeof(shas))) {
-          err("%s(%d), sha check fail for frame %p\n", __func__, idx, frame->addr);
-          st_sha_dump("user meta sha:", frame->user_meta);
-          st_sha_dump("frame sha:", shas);
+          if (!s->stat_frame_sha_fail) {
+            err("%s(%d), sha check fail for frame %p\n", __func__, idx, frame->addr);
+            st_sha_dump("user meta sha:", frame->user_meta);
+            st_sha_dump("frame sha:", shas);
+          }
+          s->stat_frame_sha_fail++;
         }
       }
     }
@@ -367,8 +378,30 @@ static int app_rx_st20p_result(struct st_app_rx_st20p_session* s) {
   if (!s->stat_frame_total_received) return -EINVAL;
 
   bool fps_ok = ST_APP_EXPECT_NEAR(framerate, s->expect_fps, s->expect_fps * 0.05);
-  notce("%s(%d), %s, fps %f, %d frame received\n", __func__, idx,
-        fps_ok ? "OK" : "FAILED", framerate, s->stat_frame_total_received);
+  /* A mismatch is fatal. Frames without a sha are only unverifiable, so they fail the
+   * session just when not one frame was ever checked -- that is the check itself being
+   * broken (no sha from the transmitter, a pixel conversion, header split), which must
+   * not pass as if content had been compared. */
+  bool sha_ok =
+      !s->stat_frame_sha_fail && s->stat_frame_sha_absent < s->stat_frame_total_received;
+  const char* sha_state = "off";
+  if (s->sha_check) {
+    if (s->stat_frame_sha_fail)
+      sha_state = "MISMATCH";
+    else if (!sha_ok)
+      sha_state = "UNVERIFIED";
+    else
+      sha_state = "verified";
+  }
+  notce("%s(%d), %s, fps %f, %d frame received, sha %s\n", __func__, idx,
+        (fps_ok && sha_ok) ? "OK" : "FAILED", framerate, s->stat_frame_total_received,
+        sha_state);
+  if (s->stat_frame_sha_absent)
+    warn("%s(%d), %d frame(s) carried no sha and were not checked\n", __func__, idx,
+         s->stat_frame_sha_absent);
+  if (s->stat_frame_sha_fail)
+    err("%s(%d), %d frame(s) did not match the sha sent by the transmitter\n", __func__,
+        idx, s->stat_frame_sha_fail);
 
   /* When fps is off or wire-layer reports any anomaly, fetch wire-layer counters
    * and classify the cause from already-published stats so the user can tell

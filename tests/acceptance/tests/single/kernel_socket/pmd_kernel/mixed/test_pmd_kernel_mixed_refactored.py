@@ -73,6 +73,7 @@ def test_pmd_kernel_mixed_format_refactored(
         test_mode=test_mode,
         replicas=replicas,
         test_time=test_time,
+        video_sha_check=True,
         sessions=[
             {
                 "session_type": "st20p",

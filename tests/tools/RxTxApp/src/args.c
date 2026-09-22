@@ -932,7 +932,14 @@ int st_app_parse_args(struct st_app_context* ctx, struct mtl_init_params* p, int
         p->flags |= MTL_FLAG_VIRTIO_USER;
         break;
       case ST_ARG_VIDEO_SHA_CHECK:
+#ifdef APP_HAS_SSL
         ctx->video_sha_check = true;
+#else
+        /* st_sha256() is a rand() stub without openssl, so every frame would
+         * report a mismatch. Refuse rather than fake the check. */
+        err("%s, --video_sha_check needs a build with openssl\n", __func__);
+        return -EINVAL;
+#endif
         break;
       case ST_ARG_ARP_TIMEOUT_S:
         p->arp_timeout_s = atoi(optarg);
