@@ -6,7 +6,8 @@ Mirrors ``test_kernel_lo.py`` but uses the unified ``application`` fixture
 with the multi-session ``sessions=[...]`` API added to ``RxTxApp``.
 
 Pass criterion: process rc==0 AND ``check_rx_output`` passes for *every*
-populated session type (st20p OK + converters; st30p OK; anc OK).
+populated session type (st20p OK + converters; st30p OK; anc OK) AND, with
+one replica, the st20p and st30p recordings match their sources.
 """
 
 import pytest
@@ -38,6 +39,8 @@ def test_kernello_mixed_format_refactored(
     media,
     setup_interfaces,
     application,
+    output_files,
+    media_integrity,
 ):
     """Test mixed media streams over kernel loopback interface (refactored).
 
@@ -55,6 +58,9 @@ def test_kernello_mixed_format_refactored(
     :param media: Source media directory path
     :param setup_interfaces: Interface setup helper for cleanup
     :param application: Media application driver (``RxTxApp``)
+    :param output_files: Tracker that removes the st20p recording afterwards
+    :param media_integrity: Compares the st20p and st30p recordings with their
+        sources
     """
     media_file_info, media_file_path = media_file
     audio_file = audio_files["PCM24"]
@@ -68,6 +74,13 @@ def test_kernello_mixed_format_refactored(
         host.connection.path(media_file_path).parent / ("out_" + audio_file["filename"])
     )
     anc_path = str(host.connection.path(media) / ancillary_file["filename"])
+    # Replicas share one url, so only a lone session's recordings can be
+    # compared against their sources.
+    rx_output = None
+    if replicas == 1:
+        rx_output = output_files.register(f"{media_file_path}.out")
+    else:
+        media_integrity.skip("replicas share one RX output url")
 
     application.create_command(
         nic_port_list=["kernel:lo", "kernel:lo"],
@@ -83,9 +96,10 @@ def test_kernello_mixed_format_refactored(
                 "framerate": parse_fps_to_pformat(media_file_info["fps"]),
                 "pixel_format": media_file_info["file_format"],
                 "transport_format": media_file_info["format"],
-                # No output_file: an RX destination is opened fopen(url, "wb"),
-                # which would truncate the source this TX streams from.
                 "input_file": media_file_path,
+                # Never the input_file: RX opens it fopen(url, "wb"), which would
+                # truncate the source this TX streams from.
+                "output_file": rx_output,
             },
             {
                 "session_type": "st30p",
@@ -111,4 +125,5 @@ def test_kernello_mixed_format_refactored(
         test_time=test_time,
         host=host,
         interface_setup=setup_interfaces,
+        integrity=media_integrity,
     )

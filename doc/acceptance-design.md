@@ -217,7 +217,11 @@ to -- `FileVideoIntegrityRunner` (MD5-compares frames) for video sessions,
 `FileAudioIntegrityRunner` (compares sample buffers) for audio sessions,
 using size/count math from `mtl_engine/integrity.py`. A test that requests
 `media_integrity` but never dispatches it fails in teardown, same as
-`pcap_capture`.
+`pcap_capture`. An RxTxApp `sessions=[...]` run builds one intent per
+st20p and st30p session and evaluates every one, so one failing recording
+cannot hide another; st22p is lossy and the other types have no checker.
+Replicas share one output URL, so a test with `replicas > 1` has to skip
+the check.
 
 The two dual-host integrity tests
 (`tests/dual/st20p/integrity/`, `tests/dual/st30p/integrity/`) still call

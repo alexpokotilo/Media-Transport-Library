@@ -37,6 +37,8 @@ def test_pmd_kernel_mixed_format_refactored(
     test_config,
     media_file,
     application,
+    output_files,
+    media_integrity,
 ):
     """Refactored test for pmd kernel mixed format.
 
@@ -50,6 +52,9 @@ def test_pmd_kernel_mixed_format_refactored(
     :param test_config: Test configuration dictionary loaded from ``test_config.yaml``.
     :param media_file: Parametrized media file fixture (info dict, file path).
     :param application: Media application driver fixture (currently ``RxTxApp``).
+    :param output_files: Tracker that removes the st20p recording afterwards.
+    :param media_integrity: Compares the st20p and st30p recordings with their
+        sources.
     """
     media_file_info, media_file_path = media_file
     audio_file = audio_files["PCM24"]
@@ -67,6 +72,13 @@ def test_pmd_kernel_mixed_format_refactored(
         host.connection.path(media_file_path).parent / ("out_" + audio_file["filename"])
     )
     anc_path = str(host.connection.path(media) / ancillary_file["filename"])
+    # Replicas share one url, so only a lone session's recordings can be
+    # compared against their sources.
+    rx_output = None
+    if replicas == 1:
+        rx_output = output_files.register(f"{media_file_path}.out")
+    else:
+        media_integrity.skip("replicas share one RX output url")
 
     application.create_command(
         nic_port_list=interfaces_list,
@@ -82,9 +94,10 @@ def test_pmd_kernel_mixed_format_refactored(
                 "framerate": parse_fps_to_pformat(media_file_info["fps"]),
                 "pixel_format": media_file_info["file_format"],
                 "transport_format": media_file_info["format"],
-                # No output_file: an RX destination is opened fopen(url, "wb"),
-                # which would truncate the source this TX streams from.
                 "input_file": media_file_path,
+                # Never the input_file: RX opens it fopen(url, "wb"), which would
+                # truncate the source this TX streams from.
+                "output_file": rx_output,
             },
             {
                 "session_type": "st30p",
@@ -110,4 +123,5 @@ def test_pmd_kernel_mixed_format_refactored(
         test_time=test_time,
         host=host,
         interface_setup=setup_interfaces,
+        integrity=media_integrity,
     )

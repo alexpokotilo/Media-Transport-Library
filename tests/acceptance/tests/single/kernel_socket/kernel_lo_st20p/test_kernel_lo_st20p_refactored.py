@@ -4,6 +4,7 @@
 
 Validates ST2110-20 pipeline mode video transmission and reception over the
 kernel-socket loopback interface using the unified ``application`` fixture.
+With one replica, the RX recording must match its source.
 """
 
 import pytest
@@ -28,6 +29,8 @@ def test_kernello_st20p_video_format_refactored(
     replicas,
     media_file,
     application,
+    output_files,
+    media_integrity,
 ):
     """Refactored test for kernello st20p video format.
 
@@ -38,11 +41,20 @@ def test_kernello_st20p_video_format_refactored(
     :param replicas: Number of session replicas to spawn.
     :param media_file: Parametrized media file fixture (info dict, file path).
     :param application: Media application driver fixture (currently ``RxTxApp``).
+    :param output_files: Tracker that removes the RX recording afterwards.
+    :param media_integrity: Compares the RX recording with its source.
     """
     media_file_info, media_file_path = media_file
     host = list(hosts.values())[0]
     # Kernel-socket loopback init is slower than VF.
     test_time = max(test_time, 90)
+    # Replicas share one url, so only a lone session's recording can be
+    # compared against its source.
+    rx_output = None
+    if replicas == 1:
+        rx_output = output_files.register(f"{media_file_path}.out")
+    else:
+        media_integrity.skip("replicas share one RX output url")
 
     application.create_command(
         session_type="st20p",
@@ -54,6 +66,7 @@ def test_kernello_st20p_video_format_refactored(
         pixel_format=media_file_info["file_format"],
         transport_format=media_file_info["format"],
         input_file=media_file_path,
+        output_file=rx_output,
         replicas=replicas,
         test_time=test_time,
     )
@@ -62,4 +75,5 @@ def test_kernello_st20p_video_format_refactored(
         build=mtl_path,
         test_time=test_time,
         host=host,
+        integrity=media_integrity,
     )
